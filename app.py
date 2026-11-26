@@ -10,19 +10,18 @@ st.set_page_config(
     layout="wide"
 )
 
-import os
-def _cfg(k, default):
+def _cfg(k, default=""):
     try:
-        if k in st.secrets:
-            return st.secrets[k]
+        if k in st.secrets and str(st.secrets[k]).strip():
+            return str(st.secrets[k]).strip()
     except Exception:
         pass
-    return os.getenv(k, default)
+    val = os.getenv(k, default)
+    return str(val).strip() if val is not None else default
 
-NEO4J_URI = _cfg("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = _cfg("NEO4J_USER", "neo4j")
-NEO4J_PASS = _cfg("NEO4J_PASS", "12345678")
-
+NEO4J_URI = _cfg("NEO4J_URI", "neo4j+s://d467745a.databases.neo4j.io")
+NEO4J_USER = _cfg("NEO4J_USER") or _cfg("NEO4J_USERNAME", "d467745a")
+NEO4J_PASS = _cfg("NEO4J_PASS") or _cfg("NEO4J_PASSWORD", "")
 @st.cache_resource
 def get_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
