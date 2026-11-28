@@ -91,7 +91,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
     st.title("🔍 牛肉 SPS 知识图谱自然语言智能检索")
     st.caption("内置 154 个成员中英文/代码映射 + 复合国家名单拆解 + 争端自动回溯，支持多维筛选与全字段导出。")
 
-    FULL_COUNTRY_MAP = {
+FULL_COUNTRY_MAP = {
         "阿富汗": ["AFG", "Afghanistan"], "阿尔巴尼亚": ["ALB", "Albania"], "阿尔及利亚": ["DZA", "Algeria"],
         "安哥拉": ["AGO", "Angola"], "安提瓜和巴布达": ["ATG", "Antigua and Barbuda"], "阿根廷": ["ARG", "Argentina"],
         "亚美尼亚": ["ARM", "Armenia"], "澳大利亚": ["AUS", "Australia"], "奥地利": ["AUT", "Austria"],
@@ -123,7 +123,8 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
         "伊拉克": ["IRQ", "Iraq"], "爱尔兰": ["IRL", "Ireland"], "以色列": ["ISR", "Israel"],
         "意大利": ["ITA", "Italy"], "牙买加": ["JAM", "Jamaica"], "日本": ["JPN", "Japan"],
         "约旦": ["JOR", "Jordan"], "哈萨克斯坦": ["KAZ", "Kazakhstan"], "肯尼亚": ["KEN", "Kenya"],
-        "韩国": ["KOR", "Korea"], "科威特": ["KWT", "Kuwait"], "吉尔吉斯斯坦": ["KGZ", "Kyrgyzstan"],
+        "韩国": ["KOR", "Korea", "Republic of Korea", "Korea, Republic of"],
+        "科威特": ["KWT", "Kuwait"], "吉尔吉斯斯坦": ["KGZ", "Kyrgyzstan"],
         "老挝": ["LAO", "Lao", "Laos"], "拉脱维亚": ["LVA", "Latvia"], "黎巴嫩": ["LBN", "Lebanon"],
         "莱索托": ["LSO", "Lesotho"], "利比里亚": ["LBR", "Liberia"], "利比亚": ["LBY", "Libya"],
         "列支敦士登": ["LIE", "Liechtenstein"], "立陶宛": ["LTU", "Lithuania"], "卢森堡": ["LUX", "Luxembourg"],
@@ -138,7 +139,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
         "阿曼": ["OMN", "Oman"], "巴基斯坦": ["PAK", "Pakistan"], "巴拿马": ["PAN", "Panama"],
         "巴布亚新几内亚": ["PNG", "Papua New Guinea"], "巴拉圭": ["PRY", "Paraguay"], "秘鲁": ["PER", "Peru"],
         "菲律宾": ["PHL", "Philippines"], "波兰": ["POL", "Poland"], "葡萄牙": ["PRT", "Portugal"],
-        "卡塔尔": ["QAT", "Qatar"], "罗马尼亚": ["ROU", "Romania"], "俄罗斯": ["RUS", "Russian", "Russia"],
+        "卡塔尔": ["QAT", "Qatar"], "罗马尼亚": ["ROU", "Romania"], "俄罗斯": ["RUS", "Russian", "Russia", "Russian Federation"],
         "卢旺达": ["RWA", "Rwanda"], "圣基茨和尼维斯": ["KNA", "Saint Kitts and Nevis"], "圣卢西亚": ["LCA", "Saint Lucia"],
         "圣文森特和格林纳丁斯": ["VCT", "Saint Vincent and the Grenadines"], "萨摩亚": ["WSM", "Samoa"],
         "沙特": ["SAU", "Saudi Arabia"], "塞内加尔": ["SEN", "Senegal"], "塞尔维亚": ["SRB", "Serbia"],
@@ -146,38 +147,155 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
         "斯洛伐克": ["SVK", "Slovakia"], "斯洛文尼亚": ["SVN", "Slovenia"], "所罗门群岛": ["SLB", "Solomon Islands"],
         "南非": ["ZAF", "South Africa"], "西班牙": ["ESP", "Spain"], "斯里兰卡": ["LKA", "Sri Lanka"],
         "苏里南": ["SUR", "Suriname"], "瑞典": ["SWE", "Sweden"], "瑞士": ["CHE", "Switzerland"],
-        "塔吉克斯坦": ["TJK", "Tajikistan"], "坦桑尼亚": ["TZA", "Tanzania"], "泰国": ["THA", "Thailand"],
+        "塔吉克斯坦": ["TJK", "Tajikistan"], "坦桑尼亚": ["TZA", "Tanzania"], "泰国": ["THA", "Thailand", "Kingdom of Thailand"],
         "多哥": ["TGO", "Togo"], "汤加": ["TON", "Tonga"], "特立尼达和多巴哥": ["TTO", "Trinidad and Tobago"],
         "突尼斯": ["TUN", "Tunisia"], "土耳其": ["TUR", "Türkiye", "Turkey"], "乌干达": ["UGA", "Uganda"],
         "乌克兰": ["UKR", "Ukraine"], "阿联酋": ["ARE", "United Arab Emirates"], "英国": ["GBR", "United Kingdom"],
-        "美国": ["USA", "United States"], "乌拉圭": ["URY", "Uruguay"], "乌兹别克斯坦": ["UZB", "Uzbekistan"],
+        "美国": ["USA", "United States", "United States of America"], "乌拉圭": ["URY", "Uruguay"], "乌兹别克斯坦": ["UZB", "Uzbekistan"],
         "瓦努阿图": ["VUT", "Vanuatu"], "委内瑞拉": ["VEN", "Venezuela"], "越南": ["VNM", "Viet Nam", "Vietnam"],
         "也门": ["YEM", "Yemen"], "赞比亚": ["ZMB", "Zambia"], "津巴布韦": ["ZWE", "Zimbabwe"]
     }
 
-    link_cfg = {"原文链接": st.column_config.LinkColumn("原文链接", display_text="打开WTO原文")}
-    tab_nl, tab_combo = st.tabs(["💬 自然语言智能问答（154国全覆盖）", "🎛️ 全库成员实体多维筛选（10字段）"])
-
-    with tab_nl:
-        preset = st.selectbox(
-            "快捷示例问题（也可在下方文本框自由输入任意国家与措施）：",
-            [
-                "查询巴拿马（Panama）相关的牛肉 SPS 通报与争端",
-                "查询触发过 WTO 争端（STC）的牛肉 SPS 通报完整证据链",
-                "查询美国（USA）发布的牛肉疫病检疫类 SPS 通报",
-                "查询巴西（BRA）发布的牛肉 SPS 通报",
-                "查询澳大利亚（AUS）发布的牛肉 SPS 通报",
-                "查询历史提出频次最高（Times_Raised >= 4）的涉牛肉 WTO 特别贸易关注"
-            ]
-        )
-        user_q = st.text_input("输入自定义检索问题（支持任意国家中英文名、ISO3 代码或措施关键词）：", value=preset)
-
+    def build_exact_country_filter(field_expr, tokens):
+        """对国家字段做精确匹配或逗号分隔独立项匹配，避免子串误伤"""
+        clauses = []
+        for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
+            safe_tok = tok.upper().replace("'", "\\'")
+            clauses.append(
+                f"(toUpper(trim({field_expr})) = '{safe_tok}' "
+                f"OR toUpper({field_expr}) STARTS WITH '{safe_tok},' "
+                f"OR toUpper({field_expr}) CONTAINS ', {safe_tok},' "
+                f"OR toUpper({field_expr}) ENDS WITH ', {safe_tok}')"
+            )
+        return " OR ".join(clauses)
         if st.button("执行图谱穿透检索", type="primary"):
+            matched_labels = []
             target_tokens = []
+
             for cn_name, aliases in FULL_COUNTRY_MAP.items():
-                if cn_name in user_q or any(a.upper() in user_q.upper() for a in aliases):
+                if cn_name in user_q or any(
+                    (len(a) == 3 and a.isalpha() and f" {a.upper()} " in f" {user_q.upper()} ")
+                    or (len(a) > 3 and a.upper() in user_q.upper())
+                    for a in aliases
+                ):
+                    matched_labels.append(cn_name)
                     target_tokens.extend(aliases)
 
+            if not target_tokens:
+                db_countries = [r["name"] for r in run_cypher("MATCH (c:Country) RETURN DISTINCT c.iso3 AS name") if r["name"]]
+                for dc in db_countries:
+                    dc_clean = dc.strip()
+                    if len(dc_clean) == 3 and dc_clean.isalpha():
+                        if f" {dc_clean.upper()} " in f" {user_q.upper()} ":
+                            matched_labels.append(dc_clean)
+                            target_tokens.append(dc_clean)
+                    elif len(dc_clean) >= 4 and dc_clean.upper() in user_q.upper():
+                        matched_labels.append(dc_clean)
+                        target_tokens.append(dc_clean)
+
+            cats = ["疫病检疫", "兽药残留", "注册资质", "区域化管理", "检测认证", "包装追溯"]
+            matched_cats = [c for c in cats if c in user_q]
+
+            if matched_labels:
+                st.caption(f"已识别检索目标国家/地区：**{'、'.join(dict.fromkeys(matched_labels))}**")
+
+            if "频次最高" in user_q or "Times_Raised" in user_q or ("特别贸易关注" in user_q and "通报" not in user_q and not target_tokens):
+                cypher = """
+                MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
+                WHERE d.times_raised >= 4
+                OPTIONAL MATCH (trig_m:SPS_Measure)-[:TRIGGERS]->(d)
+                RETURN d.dispute_id AS 争端编号, d.dispute_type AS 争端类型, d.raised_year AS 首次提出年份,
+                       d.times_raised AS 累计磋商频次, collect(DISTINCT comp.iso3) AS 起诉方,
+                       collect(DISTINCT resp.iso3) AS 被诉方, collect(DISTINCT trig_m.measure_id) AS 关联涉案通报,
+                       d.core_issue AS 核心争议焦点
+                ORDER BY d.times_raised DESC LIMIT 30
+                """
+                res = run_cypher(cypher)
+                with st.expander("查看自动生成的 Cypher 图查询语句"):
+                    st.code(cypher, language="cypher")
+                if res:
+                    st.success(f"检索成功！共命中 {len(res)} 条高频争端/关注记录：")
+                    st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True)
+                else:
+                    st.info("当前图谱中暂无累计磋商频次 >= 4 的记录。")
+
+            elif "触发" in user_q or "证据链" in user_q or ("争端" in user_q and not target_tokens and not matched_cats):
+                cypher = """
+                MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)-[:TRIGGERS]->(d:Dispute)
+                OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
+                OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
+                RETURN c.iso3 AS 通报发布国, m.measure_id AS 通报编号, m.publish_date AS 发布日期,
+                       m.is_emergency AS 是否紧急通报, collect(DISTINCT cat.name) AS 措施分类,
+                       max(emp.ave_pct) AS 最高实证AVE_pct, d.dispute_id AS 关联WTO争端,
+                       collect(DISTINCT t.iso3) AS 受影响成员, m.title AS 通报标题, m.source_link AS 原文链接
+                LIMIT 50
+                """
+                res = run_cypher(cypher)
+                with st.expander("查看自动生成的 Cypher 图查询语句"):
+                    st.code(cypher, language="cypher")
+                if res:
+                    st.success(f"检索成功！共命中 {len(res)} 条触发争端的通报记录：")
+                    st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
+                else:
+                    st.info("当前图谱中暂无触发争端的通报记录。")
+
+            else:
+                if not target_tokens and not matched_cats:
+                    st.warning("未能识别出有效的国家名称或措施维度，请尝试输入国家中英文名（如 巴拿马 / Panama / 韩国 / 泰国）、ISO3 代码，或在右侧【全库成员实体多维筛选】中直接选择。")
+                    st.stop()
+
+                where_parts = []
+                if target_tokens:
+                    c_cond = build_exact_country_filter("c.iso3", target_tokens)
+                    where_parts.append(f"({c_cond})")
+                if matched_cats:
+                    cat_cond = " OR ".join([f"cat.name = '{c}'" for c in matched_cats])
+                    where_parts.append(f"({cat_cond})")
+                where_sql = "WHERE " + " AND ".join(where_parts)
+
+                cypher = f"""
+                MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)
+                OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
+                OPTIONAL MATCH (m)-[:TRIGGERS]->(d:Dispute)
+                OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
+                {where_sql}
+                RETURN c.iso3 AS 通报发布国,
+                       m.measure_id AS 通报编号,
+                       m.publish_date AS 发布日期,
+                       m.is_emergency AS 是否紧急通报,
+                       collect(DISTINCT cat.name) AS 措施分类,
+                       max(emp.ave_pct) AS 最高实证AVE_pct,
+                       collect(DISTINCT d.dispute_id) AS 关联WTO争端,
+                       collect(DISTINCT t.iso3) AS 受影响成员,
+                       m.title AS 通报标题,
+                       m.source_link AS 原文链接
+                ORDER BY m.publish_date DESC LIMIT 50
+                """
+
+                with st.expander("查看自动生成的 Cypher 图查询语句"):
+                    st.code(cypher, language="cypher")
+
+                res = run_cypher(cypher)
+                if res:
+                    st.success(f"检索成功！共命中 {len(res)} 条该国/该维度直接发布的图谱通报记录：")
+                    st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
+                elif target_tokens:
+                    comp_cond = build_exact_country_filter("comp.iso3", target_tokens)
+                    resp_cond = build_exact_country_filter("resp.iso3", target_tokens)
+                    disp_fallback = run_cypher(f"""
+                        MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
+                        WHERE ({comp_cond}) OR ({resp_cond})
+                        OPTIONAL MATCH (trig_m:SPS_Measure)-[:TRIGGERS]->(d)
+                        RETURN DISTINCT d.dispute_id AS 争端编号, d.dispute_type AS 争端类型, d.raised_year AS 首次提出年份,
+                               d.times_raised AS 累计磋商频次, collect(DISTINCT comp.iso3) AS 起诉方,
+                               collect(DISTINCT resp.iso3) AS 被诉方, collect(DISTINCT trig_m.measure_id) AS 关联涉案通报,
+                               d.core_issue AS 核心争议焦点
+                    """)
+                    if disp_fallback:
+                        st.info(f"该成员在当前涉牛肉通报库中暂无直接发布的通报，但已精确查到其参与的 **{len(disp_fallback)}** 起相关 WTO 争端/特别贸易关注：")
+                        st.dataframe(pd.DataFrame(disp_fallback), width="stretch", hide_index=True)
+                    else:
+                        st.info("该成员在当前涉牛肉通报库与争端库中暂无直接发布的通报或参与的争端记录（未混入其他无关国家记录）。")
             if not target_tokens:
                 db_countries = [r["name"] for r in run_cypher("MATCH (c:Country) RETURN DISTINCT c.iso3 AS name") if r["name"]]
                 for dc in db_countries:
