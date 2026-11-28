@@ -174,7 +174,6 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
     }
 
     def build_exact_country_filter(field_expr, tokens):
-        """按逗号拆分为独立国家/代码元素后精确匹配，彻底避免子串误伤"""
         tok_list = sorted({
             t.strip().upper().replace("'", "\\'")
             for t in tokens
@@ -249,7 +248,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 """
                 res = run_cypher(cypher)
                 with st.expander("查看自动生成的 Cypher 图查询语句"):
-                    st.code(cypher, language="cypher")
+                    st.text(cypher)
                 if res:
                     st.success(f"检索成功！共命中 {len(res)} 条高频争端/关注记录：")
                     st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True)
@@ -269,7 +268,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 """
                 res = run_cypher(cypher)
                 with st.expander("查看自动生成的 Cypher 图查询语句"):
-                    st.code(cypher, language="cypher")
+                    st.text(cypher)
                 if res:
                     st.success(f"检索成功！共命中 {len(res)} 条触发争端的通报记录：")
                     st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
@@ -281,22 +280,20 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                     st.warning("未能识别出有效的国家名称或措施维度，请尝试输入国家中英文名（如 巴拿马 / Panama / 韩国 / 泰国）、ISO3 代码，或在右侧【全库成员实体多维筛选】中直接选择。")
                     st.stop()
 
-                where_parts = []
-                if target_tokens:
-                    c_cond = build_exact_country_filter("c.iso3", target_tokens)
-                    where_parts.append(f"({c_cond})")
+                c_cond = build_exact_country_filter("c.iso3", target_tokens) if target_tokens else "true"
+                cat_filter_clause = ""
                 if matched_cats:
-                    cat_cond = " OR ".join([f"cat.name = '{c}'" for c in matched_cats])
-                    where_parts.append(f"({cat_cond})")
-                where_sql = "WHERE " + " AND ".join(where_parts)
+                    cat_list_str = "[" + ", ".join([f"'{c}'" for c in matched_cats]) + "]"
+                    cat_filter_clause = f"WHERE cat.name IN {cat_list_str}"
 
                 cypher = f"""
                 MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)
+                WHERE {c_cond}
                 OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
+                {cat_filter_clause}
                 OPTIONAL MATCH (m)-[:TRIGGERS]->(d:Dispute)
                 OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
-                {where_sql}
-                RETURN c.iso3 AS 通报发布国,
+                RETURN DISTINCT c.iso3 AS 通报发布国,
                        m.measure_id AS 通报编号,
                        m.publish_date AS 发布日期,
                        m.is_emergency AS 是否紧急通报,
@@ -310,7 +307,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 """
 
                 with st.expander("查看自动生成的 Cypher 图查询语句"):
-                    st.code(cypher, language="cypher")
+                    st.text(cypher)
 
                 res = run_cypher(cypher)
                 if res:
@@ -332,7 +329,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                         st.info(f"该成员在当前涉牛肉通报库中暂无直接发布的通报，但已精确查到其参与的 **{len(disp_fallback)}** 起相关 WTO 争端/特别贸易关注：")
                         st.dataframe(pd.DataFrame(disp_fallback), width="stretch", hide_index=True)
                     else:
-                        st.info("该成员在当前涉牛肉通报库与争端库中暂无直接发布的通报或参与的争端记录（未混入其他无关国家记录）。")
+                        st.info("该成员在当前涉牛肉通报库与争端库中暂无直接发布的通报或参与的争端记录。")
 
     with tab_combo:
         st.markdown("自动拆解图谱全部 154 个成员节点的复合名单，支持按**单个独立国家/地区**全维度穿透查询（含 10 项核心字段）：")
@@ -341,7 +338,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
         clean_countries = set()
         for item in raw_nodes:
             parts = [
-                p.strip() for p in item.split(",")
+                p.strip() for p in item.split(", ")
                 if p.strip() and p.strip() not in [
                     "Republic of", "Islamic Republic of", "Democratic Republic of the",
                     "Plurinational State of", "Bolivarian Republic of"
@@ -427,7 +424,6 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
             if d_res:
                 st.markdown("##### ⚖️ 该国参与的 WTO 争端与特别贸易关注（全字段明细）")
                 st.dataframe(pd.DataFrame(d_res), width="stretch", hide_index=True)
-
 # ================= 模块 3：SPS 反制工具量化推演沙盘 =================
 elif page == "3. SPS 反制工具量化推演沙盘":
     st.title("⚖️ 牛肉贸易摩擦 SPS 反制工具量化评估与推演沙盘")
