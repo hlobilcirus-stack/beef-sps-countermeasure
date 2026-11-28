@@ -462,7 +462,6 @@ elif page == "3. SPS 反制工具量化推演沙盘":
         if not selected_tools:
             st.info("请在左侧至少选择一项 SPS 反制工具以启动推演。")
         else:
-            # 多措施边际递减叠加法则：按实证 AVE 降序排列，第 k 项权重为 0.65^(k-1)，再乘以执法严格度系数
             aves_sorted = sorted([(t, float(emp_dict[t]["ave"])) for t in selected_tools], key=lambda x: x[1], reverse=True)
             weighted_aves = [a * (0.65 ** idx) for idx, (_, a) in enumerate(aves_sorted)]
             combined_ave = sum(weighted_aves) * intensity
@@ -489,7 +488,6 @@ elif page == "3. SPS 反制工具量化推演沙盘":
 
             st.info(f"**WTO 合规与争端触发风险研判**：{risk_label}\n\n**政策执行与合规提示**：{compliance_tip}")
 
-            # 3. 进口缺口第三方供应链转移分配测算
             st.markdown(f"#### 3. 进口缺口第三方供应链转移分配测算（预计分流 {int(diversion_rate*100)}% 缺口）")
             diversion_total = trade_loss_usd * diversion_rate
             shares = {
@@ -513,7 +511,6 @@ elif page == "3. SPS 反制工具量化推演沙盘":
             ])
             st.dataframe(df_div, width="stretch", hide_index=True)
 
-            # 4. 执法强度敏感性对比（0.8 / 1.0 / 1.2 / 1.4）
             st.markdown("#### 4. 执法严格度敏感性情景对比")
             base_sum_ave = sum(weighted_aves)
             sens_rows = []
@@ -536,7 +533,6 @@ elif page == "3. SPS 反制工具量化推演沙盘":
                 width="stretch"
             )
 
-            # 5. 一键导出推演结果明细
             export_summary = pd.DataFrame([{
                 "目标反制供应国": target_country,
                 "基准进口额_亿美元": base_trade,
@@ -558,13 +554,10 @@ elif page == "3. SPS 反制工具量化推演沙盘":
             )
 
     with st.expander("📐 查看反制推演模型公式与参数设定说明"):
-        st.markdown("""
-        * **多工具边际递减叠加**：将所选 SPS 工具按实证 AVE 从高到低排序（记为 $A_{(1)} \ge A_{(2)} \ge \dots \ge A_{(k)}$），按权重 $0.65^{i-1}$ 折算后乘以执法严格度系数 $\\lambda$：
-          $$\\text{AVE}_{\\text{综合}} = \\lambda \\sum_{i=1}^{k} 0.65^{i-1} A_{(i)}$$
-        * **贸易抑制降幅测算**：结合所选工具的平均绝对进口价格弹性 $\\bar{\\varepsilon}$ 与缩放校准系数（上限封顶 $92.0\\%$）：
-          $$\\Delta \\text{Trade}\\% = \\min\\left(92.0,\; \\frac{\\text{AVE}_{\\text{综合}}}{100} \\times \\bar{\\varepsilon} \\times 68.0\\right)$$
-        * **第三方供应国分流归整**：当目标供应国为分流名单成员之一时，自动剔除自身并按剩余供应国相对权重归一化分配，确保分流份额合计为 $100\\%$。
+        st.markdown(r"""
+        * **多工具边际递减叠加**：将所选 SPS 工具按实证 AVE 从高到低排序（记为 $A_{(1)} \ge A_{(2)} \ge \dots \ge A_{(k)}$），按权重 $0.65^{i-1}$ 折算后乘以执法严格度系数 $\lambda$：
+          $$\text{AVE}_{\text{综合}} = \lambda \sum_{i=1}^{k} 0.65^{i-1} A_{(i)}$$
+        * **贸易抑制降幅测算**：结合所选工具的平均绝对进口价格弹性 $\bar{\varepsilon}$ 与缩放校准系数（上限封顶 $92.0\%$）：
+          $$\Delta \text{Trade}\% = \min\left(92.0,\; \frac{\text{AVE}_{\text{综合}}}{100} \times \bar{\varepsilon} \times 68.0\right)$$
+        * **第三方供应国分流归整**：当目标供应国为分流名单成员之一时，自动剔除自身并按剩余供应国相对权重归一化分配，确保分流份额合计为 $100\%$。
         """)
-                for k, v in shares.items() if k != target_country
-            ])
-            st.dataframe(df_div, width="stretch", hide_index=True)
