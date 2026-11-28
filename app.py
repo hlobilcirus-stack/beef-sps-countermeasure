@@ -254,7 +254,11 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 st.success(f"检索成功！共命中 {len(res)} 条图谱通报记录：")
                 st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
             elif target_tokens:
-                tok_cond = " OR ".join([f"toUpper(x.iso3) CONTAINS '{t.upper()}'" for t in set(target_tokens)])
+                t_conds = []
+                for t in set(target_tokens):
+                    tu = t.upper().replace("'", "\\'")
+                    t_conds.append(f"toUpper(x.iso3) = '{tu}' OR toUpper(x.iso3) STARTS WITH '{tu},' OR toUpper(x.iso3) CONTAINS ', {tu}'")
+                tok_cond = " OR ".join(t_conds)
                 disp_fallback = run_cypher(f"""
                     MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
                     WHERE ({tok_cond.replace('x.iso3', 'comp.iso3')}) OR ({tok_cond.replace('x.iso3', 'resp.iso3')})
