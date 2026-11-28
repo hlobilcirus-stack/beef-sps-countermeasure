@@ -159,7 +159,7 @@ FULL_COUNTRY_MAP = {
     def build_exact_country_filter(field_expr, tokens):
         """对国家字段做精确匹配或逗号分隔独立项匹配，避免子串误伤"""
         clauses = []
-        for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
+    for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
             safe_tok = tok.upper().replace("'", "\\'")
             clauses.append(
                 f"(toUpper(trim({field_expr})) = '{safe_tok}' "
