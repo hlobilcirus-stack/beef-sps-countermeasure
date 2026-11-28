@@ -90,7 +90,7 @@ if page == "1. 图谱全景与实证基准库":
 # ================= 模块 2：自然语言智能检索 =================
 elif page == "2. 自然语言智能检索 (GraphQA)":
     st.title("🔍 牛肉 SPS 知识图谱自然语言智能检索")
-    st.caption("内置 154 个成员中英文/代码映射 + 复合国家名单拆解 + 争端自动回溯，支持多维筛选与全字段导出。")
+    st.caption("内置 154 个成员中英文/代码映射 + 复合国家名单精确拆解 + 争端自动回溯，支持多维筛选与全字段导出。")
 
     FULL_COUNTRY_MAP = {
         "阿富汗": ["AFG", "Afghanistan"], "阿尔巴尼亚": ["ALB", "Albania"], "阿尔及利亚": ["DZA", "Algeria"],
@@ -158,17 +158,19 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
     }
 
     def build_exact_country_filter(field_expr, tokens):
-        """对国家字段做精确匹配或逗号分隔独立项匹配，避免子串误伤"""
-        clauses = []
-        for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
-            safe_tok = tok.upper().replace("'", "\\'")
-            clauses.append(
-                f"(toUpper(trim({field_expr})) = '{safe_tok}' "
-                f"OR toUpper({field_expr}) STARTS WITH '{safe_tok},' "
-                f"OR toUpper({field_expr}) CONTAINS ', {safe_tok},' "
-                f"OR toUpper({field_expr}) ENDS WITH ', {safe_tok}')"
-            )
-        return " OR ".join(clauses)
+        """按逗号拆分为独立国家/代码元素后精确匹配，彻底避免子串误伤"""
+        tok_list = sorted({
+            t.strip().upper().replace("'", "\\'")
+            for t in tokens
+            if t and len(t.strip()) >= 2
+        })
+        if not tok_list:
+            return "false"
+        tok_array_str = "[" + ", ".join([f"'{x}'" for x in tok_list]) + "]"
+        return (
+            f"any(part IN [p IN split(toUpper(coalesce({field_expr}, '')), ',') | trim(p)] "
+            f"WHERE part IN {tok_array_str})"
+        )
 
     link_cfg = {"原文链接": st.column_config.LinkColumn("原文链接", display_text="打开WTO原文")}
     tab_nl, tab_combo = st.tabs(["💬 自然语言智能问答（154国全覆盖）", "🎛️ 全库成员实体多维筛选（10字段）"])
@@ -323,7 +325,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
         clean_countries = set()
         for item in raw_nodes:
             parts = [
-                p.strip() for p in item.split(", ")
+                p.strip() for p in item.split(",")
                 if p.strip() and p.strip() not in [
                     "Republic of", "Islamic Republic of", "Democratic Republic of the",
                     "Plurinational State of", "Bolivarian Republic of"
@@ -341,9 +343,13 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
             index=sorted_countries.index("Brazil") if "Brazil" in sorted_countries else 0
         )
         if selected_single:
-            m_notify = run_cypher("""
+            single_filter_c = build_exact_country_filter("c.iso3", [selected_single])
+            single_filter_comp = build_exact_country_filter("comp.iso3", [selected_single])
+            single_filter_resp = build_exact_country_filter("resp.iso3", [selected_single])
+
+            m_notify = run_cypher(f"""
                 MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)
-                WHERE c.iso3 = $name OR c.iso3 STARTS WITH ($name + ',')
+                WHERE {single_filter_c}
                 OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
                 OPTIONAL MATCH (m)-[:TRIGGERS]->(d:Dispute)
                 OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
@@ -358,11 +364,11 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                        m.title AS 通报标题,
                        m.source_link AS 原文链接
                 ORDER BY m.publish_date DESC LIMIT 100
-            """, {"name": selected_single})
+            """)
 
-            m_target = run_cypher("""
+            m_target = run_cypher(f"""
                 MATCH (pub:Country)-[:NOTIFIES]->(m:SPS_Measure)-[:TARGETS]->(c:Country)
-                WHERE c.iso3 CONTAINS $name
+                WHERE {single_filter_c}
                 OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
                 OPTIONAL MATCH (m)-[:TRIGGERS]->(d:Dispute)
                 RETURN pub.iso3 AS 通报发布国,
@@ -375,11 +381,11 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                        m.title AS 通报标题,
                        m.source_link AS 原文链接
                 ORDER BY m.publish_date DESC LIMIT 100
-            """, {"name": selected_single})
+            """)
 
-            d_res = run_cypher("""
+            d_res = run_cypher(f"""
                 MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
-                WHERE comp.iso3 CONTAINS $name OR resp.iso3 CONTAINS $name
+                WHERE ({single_filter_comp}) OR ({single_filter_resp})
                 OPTIONAL MATCH (trig_m:SPS_Measure)-[:TRIGGERS]->(d)
                 RETURN DISTINCT d.dispute_id AS 争端编号,
                        d.dispute_type AS 争端类型,
@@ -389,7 +395,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                        collect(DISTINCT resp.iso3) AS 被诉方,
                        collect(DISTINCT trig_m.measure_id) AS 关联涉案通报,
                        d.core_issue AS 核心争议焦点
-            """, {"name": selected_single})
+            """)
 
             c_a, c_b, c_c = st.columns(3)
             c_a.metric("主动发布 SPS 通报", f"{len(m_notify)} 条")
