@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -22,6 +23,7 @@ def _cfg(k, default=""):
 NEO4J_URI = _cfg("NEO4J_URI", "neo4j+s://d467745a.databases.neo4j.io")
 NEO4J_USER = _cfg("NEO4J_USER") or _cfg("NEO4J_USERNAME", "d467745a")
 NEO4J_PASS = _cfg("NEO4J_PASS") or _cfg("NEO4J_PASSWORD", "")
+
 @st.cache_resource
 def get_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
@@ -42,8 +44,7 @@ page = st.sidebar.radio(
 # ================= 模块 1：图谱全景与实证基准库 =================
 if page == "1. 图谱全景与实证基准库":
     st.title("📊 牛肉贸易摩擦 SPS 知识图谱全景看板")
-    
-    # 统计指标卡
+
     counts_rows = run_cypher("""
         MATCH (n:SPS_Measure) WITH count(n) AS m_cnt
         MATCH (d:Dispute) WITH m_cnt, count(d) AS d_cnt
@@ -51,7 +52,7 @@ if page == "1. 图谱全景与实证基准库":
         MATCH ()-[r:TRIGGERS]->() RETURN m_cnt, d_cnt, c_cnt, count(r) AS link_cnt
     """)
     counts = counts_rows[0] if counts_rows else {"m_cnt": 0, "d_cnt": 0, "c_cnt": 0, "link_cnt": 0}
-    
+
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("纯净涉牛肉 SPS 通报", f"{counts['m_cnt']} 条")
     c2.metric("WTO 争端与特别关注", f"{counts['d_cnt']} 起")
@@ -91,7 +92,7 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
     st.title("🔍 牛肉 SPS 知识图谱自然语言智能检索")
     st.caption("内置 154 个成员中英文/代码映射 + 复合国家名单拆解 + 争端自动回溯，支持多维筛选与全字段导出。")
 
-FULL_COUNTRY_MAP = {
+    FULL_COUNTRY_MAP = {
         "阿富汗": ["AFG", "Afghanistan"], "阿尔巴尼亚": ["ALB", "Albania"], "阿尔及利亚": ["DZA", "Algeria"],
         "安哥拉": ["AGO", "Angola"], "安提瓜和巴布达": ["ATG", "Antigua and Barbuda"], "阿根廷": ["ARG", "Argentina"],
         "亚美尼亚": ["ARM", "Armenia"], "澳大利亚": ["AUS", "Australia"], "奥地利": ["AUT", "Austria"],
@@ -159,7 +160,7 @@ FULL_COUNTRY_MAP = {
     def build_exact_country_filter(field_expr, tokens):
         """对国家字段做精确匹配或逗号分隔独立项匹配，避免子串误伤"""
         clauses = []
-    for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
+        for tok in sorted({t.strip() for t in tokens if t and len(t.strip()) >= 2}):
             safe_tok = tok.upper().replace("'", "\\'")
             clauses.append(
                 f"(toUpper(trim({field_expr})) = '{safe_tok}' "
@@ -168,6 +169,24 @@ FULL_COUNTRY_MAP = {
                 f"OR toUpper({field_expr}) ENDS WITH ', {safe_tok}')"
             )
         return " OR ".join(clauses)
+
+    link_cfg = {"原文链接": st.column_config.LinkColumn("原文链接", display_text="打开WTO原文")}
+    tab_nl, tab_combo = st.tabs(["💬 自然语言智能问答（154国全覆盖）", "🎛️ 全库成员实体多维筛选（10字段）"])
+
+    with tab_nl:
+        preset = st.selectbox(
+            "快捷示例问题（也可在下方文本框自由输入任意国家与措施）：",
+            [
+                "查询巴拿马（Panama）相关的牛肉 SPS 通报与争端",
+                "查询触发过 WTO 争端（STC）的牛肉 SPS 通报完整证据链",
+                "查询美国（USA）发布的牛肉疫病检疫类 SPS 通报",
+                "查询巴西（BRA）发布的牛肉 SPS 通报",
+                "查询澳大利亚（AUS）发布的牛肉 SPS 通报",
+                "查询历史提出频次最高（Times_Raised >= 4）的涉牛肉 WTO 特别贸易关注"
+            ]
+        )
+        user_q = st.text_input("输入自定义检索问题（支持任意国家中英文名、ISO3 代码或措施关键词）：", value=preset)
+
         if st.button("执行图谱穿透检索", type="primary"):
             matched_labels = []
             target_tokens = []
@@ -296,101 +315,6 @@ FULL_COUNTRY_MAP = {
                         st.dataframe(pd.DataFrame(disp_fallback), width="stretch", hide_index=True)
                     else:
                         st.info("该成员在当前涉牛肉通报库与争端库中暂无直接发布的通报或参与的争端记录（未混入其他无关国家记录）。")
-            if not target_tokens:
-                db_countries = [r["name"] for r in run_cypher("MATCH (c:Country) RETURN DISTINCT c.iso3 AS name") if r["name"]]
-                for dc in db_countries:
-                    if len(dc) >= 2 and dc.upper() in user_q.upper():
-                        target_tokens.append(dc)
-
-            cats = ["疫病检疫", "兽药残留", "注册资质", "区域化管理", "检测认证", "包装追溯"]
-            matched_cats = [c for c in cats if c in user_q]
-
-            if "频次最高" in user_q or "Times_Raised" in user_q or ("特别贸易关注" in user_q and "通报" not in user_q and not target_tokens):
-                cypher = """
-                MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
-                WHERE d.times_raised >= 4
-                OPTIONAL MATCH (trig_m:SPS_Measure)-[:TRIGGERS]->(d)
-                RETURN d.dispute_id AS 争端编号, d.dispute_type AS 争端类型, d.raised_year AS 首次提出年份,
-                       d.times_raised AS 累计磋商频次, collect(DISTINCT comp.iso3) AS 起诉方,
-                       collect(DISTINCT resp.iso3) AS 被诉方, collect(DISTINCT trig_m.measure_id) AS 关联涉案通报,
-                       d.core_issue AS 核心争议焦点
-                ORDER BY d.times_raised DESC LIMIT 30
-                """
-            elif "触发" in user_q or "证据链" in user_q or ("争端" in user_q and not target_tokens and not matched_cats):
-                cypher = """
-                MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)-[:TRIGGERS]->(d:Dispute)
-                OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
-                OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
-                RETURN c.iso3 AS 通报发布国, m.measure_id AS 通报编号, m.publish_date AS 发布日期,
-                       m.is_emergency AS 是否紧急通报, collect(DISTINCT cat.name) AS 措施分类,
-                       max(emp.ave_pct) AS 最高实证AVE_pct, d.dispute_id AS 关联WTO争端,
-                       collect(DISTINCT t.iso3) AS 受影响成员, m.title AS 通报标题, m.source_link AS 原文链接
-                LIMIT 50
-                """
-            else:
-                if not target_tokens and not matched_cats:
-                    st.warning("未能识别出有效的国家名称或措施维度，请尝试输入国家中英文名（如 巴拿马 / Panama）、ISO3 代码，或在右侧【全库成员实体多维筛选】中直接选择。")
-                    st.stop()
-
-                where_parts = []
-                if target_tokens:
-                    conds = []
-                    for t in set(target_tokens):
-                        tu = t.upper().replace("'", "\\'")
-                        conds.append(f"toUpper(c.iso3) = '{tu}' OR toUpper(c.iso3) STARTS WITH '{tu},' OR toUpper(c.iso3) CONTAINS ', {tu}'")
-                    c_cond = " OR ".join(conds)
-                    where_parts.append(f"({c_cond})")
-                if matched_cats:
-                    cat_cond = " OR ".join([f"cat.name = '{c}'" for c in matched_cats])
-                    where_parts.append(f"({cat_cond})")
-                where_sql = "WHERE " + " AND ".join(where_parts)
-
-                cypher = f"""
-                MATCH (c:Country)-[:NOTIFIES]->(m:SPS_Measure)
-                OPTIONAL MATCH (m)-[:BELONGS_TO]->(cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
-                OPTIONAL MATCH (m)-[:TRIGGERS]->(d:Dispute)
-                OPTIONAL MATCH (m)-[:TARGETS]->(t:Country)
-                {where_sql}
-                RETURN c.iso3 AS 通报发布国,
-                       m.measure_id AS 通报编号,
-                       m.publish_date AS 发布日期,
-                       m.is_emergency AS 是否紧急通报,
-                       collect(DISTINCT cat.name) AS 措施分类,
-                       max(emp.ave_pct) AS 最高实证AVE_pct,
-                       collect(DISTINCT d.dispute_id) AS 关联WTO争端,
-                       collect(DISTINCT t.iso3) AS 受影响成员,
-                       m.title AS 通报标题,
-                       m.source_link AS 原文链接
-                ORDER BY m.publish_date DESC LIMIT 50
-                """
-
-            with st.expander("查看自动生成的 Cypher 图查询语句"):
-                st.code(cypher, language="cypher")
-
-            res = run_cypher(cypher)
-            if res:
-                st.success(f"检索成功！共命中 {len(res)} 条图谱通报记录：")
-                st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
-            elif target_tokens:
-                t_conds = []
-                for t in set(target_tokens):
-                    tu = t.upper().replace("'", "\\'")
-                    t_conds.append(f"toUpper(x.iso3) = '{tu}' OR toUpper(x.iso3) STARTS WITH '{tu},' OR toUpper(x.iso3) CONTAINS ', {tu}'")
-                tok_cond = " OR ".join(t_conds)
-                disp_fallback = run_cypher(f"""
-                    MATCH (comp:Country)-[:RAISES_CONCERN]->(d:Dispute)-[:AGAINST_RESPONDENT]->(resp:Country)
-                    WHERE ({tok_cond.replace('x.iso3', 'comp.iso3')}) OR ({tok_cond.replace('x.iso3', 'resp.iso3')})
-                    OPTIONAL MATCH (trig_m:SPS_Measure)-[:TRIGGERS]->(d)
-                    RETURN DISTINCT d.dispute_id AS 争端编号, d.dispute_type AS 争端类型, d.raised_year AS 首次提出年份,
-                           d.times_raised AS 累计磋商频次, collect(DISTINCT comp.iso3) AS 起诉方,
-                           collect(DISTINCT resp.iso3) AS 被诉方, collect(DISTINCT trig_m.measure_id) AS 关联涉案通报,
-                           d.core_issue AS 核心争议焦点
-                """)
-                if disp_fallback:
-                    st.info(f"该成员在通报库中暂无直接发布的牛肉 SPS 通报，但已查到其参与的 **{len(disp_fallback)}** 起相关 WTO 争端/特别贸易关注：")
-                    st.dataframe(pd.DataFrame(disp_fallback), width="stretch", hide_index=True)
-                else:
-                    st.warning("已确认该成员节点存在于图谱中，但当前涉牛肉通报库与争端库中均暂无与其直接关联的记录。")
 
     with tab_combo:
         st.markdown("自动拆解图谱全部 154 个成员节点的复合名单，支持按**单个独立国家/地区**全维度穿透查询（含 10 项核心字段）：")
@@ -482,6 +406,7 @@ FULL_COUNTRY_MAP = {
                 st.markdown("##### ⚖️ 该国参与的 WTO 争端与特别贸易关注（全字段明细）")
                 st.dataframe(pd.DataFrame(d_res), width="stretch", hide_index=True)
 
+# ================= 模块 3：SPS 反制工具量化推演沙盘 =================
 elif page == "3. SPS 反制工具量化推演沙盘":
     st.title("⚖️ 牛肉贸易摩擦 SPS 反制工具量化评估与推演沙盘")
     st.markdown("基于知识图谱实证参数（Kee et al. / Fontagné et al. AVE 基准）与 Armington 局部均衡替代弹性进行反制效果模拟。")
@@ -495,7 +420,7 @@ elif page == "3. SPS 反制工具量化推演沙盘":
             ["美国 (USA)", "澳大利亚 (AUS)", "欧盟 (EUR)", "巴西 (BRA)", "加拿大 (CAN)"]
         )
         base_trade = st.number_input("基准年自该国牛肉进口额（亿美元）", min_value=0.5, max_value=200.0, value=16.5, step=0.5)
-        
+
         emp_rows = run_cypher("""
             MATCH (cat:Measure_Category)-[:HAS_ELASTICITY]->(emp:Empirical_Elasticity)
             RETURN cat.name AS name, emp.ave_pct AS ave, emp.import_elasticity AS elast, emp.trade_drop_pct AS drop
@@ -514,17 +439,14 @@ elif page == "3. SPS 反制工具量化推演沙盘":
         if not selected_tools:
             st.info("请在左侧至少选择一项 SPS 反制工具以启动推演。")
         else:
-            # 计算多措施叠加后的等效从价关税率（采用边际递减叠加法则，避免简单线性高估）
             aves = sorted([emp_dict[t]["ave"] for t in selected_tools], reverse=True)
             combined_ave = sum(a * (0.65 ** idx) for idx, a in enumerate(aves)) * intensity
             avg_elast = np.mean([abs(emp_dict[t]["elast"]) for t in selected_tools])
-            
-            # 贸易抑制降幅计算（上限封顶 92%）
+
             raw_drop_pct = min(92.0, (combined_ave / 100.0) * avg_elast * 68.0)
             trade_loss_usd = base_trade * (raw_drop_pct / 100.0)
             remaining_usd = base_trade - trade_loss_usd
 
-            # 风险等级判定
             if combined_ave >= 55 or ("疫病检疫" in selected_tools and intensity >= 1.2):
                 risk_label = "🔴 高风险（极易触发 WTO STC 特别贸易关注或 DSB 专家组磋商）"
             elif combined_ave >= 30:
@@ -539,7 +461,6 @@ elif page == "3. SPS 反制工具量化推演沙盘":
 
             st.info(f"**WTO 合规与争端触发风险研判**：{risk_label}")
 
-            # 供应链替代转移测算（南美与大洋洲核心供应国分流）
             st.markdown("#### 3. 进口缺口第三方供应链转移分配测算（预计分流 85% 缺口）")
             diversion_total = trade_loss_usd * 0.85
             shares = {"巴西 (BRA)": 0.42, "阿根廷 (ARG)": 0.22, "乌拉圭 (URY)": 0.16, "新西兰 (NZL)": 0.12, "其他供应国": 0.08}
