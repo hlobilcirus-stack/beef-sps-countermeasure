@@ -43,6 +43,7 @@ page = st.sidebar.radio(
 
 # ================= 模块 1：图谱全景与实证基准库 =================
 if page == "1. 图谱全景与实证基准库":
+if page == "1. 图谱全景与实证基准库":
     st.title("📊 牛肉贸易摩擦 SPS 知识图谱全景看板")
 
     counts_rows = run_cypher("""
@@ -60,7 +61,7 @@ if page == "1. 图谱全景与实证基准库":
     c4.metric("通报-争端跨表触发边", f"{counts['link_cnt']} 条")
 
     st.divider()
-    col_left, col_right = st.columns([1.1, 1])
+    col_left, col_right = st.columns([1.15, 1])
 
     with col_left:
         st.subheader("六大 SPS 措施维度分布与实证弹性参数（表三）")
@@ -78,6 +79,14 @@ if page == "1. 图谱全景与实证基准库":
         df_cat = pd.DataFrame(cat_data)
         st.dataframe(df_cat, width="stretch", hide_index=True)
 
+        if not df_cat.empty:
+            st.download_button(
+                label="⬇️ 导出六大维度实证参数表 (CSV)",
+                data=df_cat.to_csv(index=False).encode("utf-8-sig"),
+                file_name="sps_six_dimensions_empirical_table3.csv",
+                mime="text/csv"
+            )
+
     with col_right:
         st.subheader("各类 SPS 工具贸易抑制强度对比 (AVE %)")
         if not df_cat.empty:
@@ -86,6 +95,14 @@ if page == "1. 图谱全景与实证基准库":
                 stack=False,
                 width="stretch"
             )
+
+    with st.expander("📖 看板指标与实证参数口径说明"):
+        st.markdown("""
+        * **纯净涉牛肉 SPS 通报**：经清洗筛选后的涉牛肉卫生与植物检疫措施通报总数。
+        * **WTO 争端与特别关注**：与涉牛肉贸易摩擦相关的正式争端（DS）及特别贸易关注（STC）记录数。
+        * **实证 AVE（Ad Valorem Equivalent, %）**：将非关税 SPS 监管壁垒折算为等价从价关税率的实证基准值。
+        * **短期贸易抑制率（%）**：对应措施维度在实证基准下的短期双边贸易额下降幅度。
+        """)
 
 # ================= 模块 2：自然语言智能检索 =================
 elif page == "2. 自然语言智能检索 (GraphQA)":
