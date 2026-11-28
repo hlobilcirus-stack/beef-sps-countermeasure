@@ -252,8 +252,8 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 LIMIT 50
                 """
                 res = run_cypher(cypher)
-                with st.expander("查看自动生成的 Cypher 图查询语句"):
-                    st.code(cypher, language="cypher")
+                with st.expander("查看自动生成的 Cypher 图查询语句", expanded=True):
+                    st.text(cypher)
                 if res:
                     st.success(f"检索成功！共命中 {len(res)} 条触发争端的通报记录：")
                     st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
