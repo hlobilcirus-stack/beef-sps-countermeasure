@@ -445,45 +445,126 @@ elif page == "3. SPS 反制工具量化推演沙盘":
         """)
         emp_dict = {r["name"]: r for r in emp_rows}
 
+        if not emp_dict:
+            st.warning("当前图谱中暂无可用的实证弹性参数（Empirical_Elasticity），请检查数据库节点连接。")
+            st.stop()
+
         selected_tools = st.multiselect(
             "选择拟组合动用的 SPS 反制工具（可多选叠加）",
             list(emp_dict.keys()),
-            default=["注册资质", "检测认证"]
+            default=[t for t in ["注册资质", "检测认证"] if t in emp_dict] or list(emp_dict.keys())[:2]
         )
         intensity = st.slider("执法严格度系数（1.0 = 常规标准，1.5 = 顶格口岸严查/暂停准入）", 0.6, 1.5, 1.1, 0.1)
+        diversion_rate = st.slider("进口缺口第三方分流比例（%）", 50, 100, 85, 5) / 100.0
 
     with col_res:
         st.subheader("2. 量化推演评估结果")
         if not selected_tools:
             st.info("请在左侧至少选择一项 SPS 反制工具以启动推演。")
         else:
-            aves = sorted([emp_dict[t]["ave"] for t in selected_tools], reverse=True)
-            combined_ave = sum(a * (0.65 ** idx) for idx, a in enumerate(aves)) * intensity
-            avg_elast = np.mean([abs(emp_dict[t]["elast"]) for t in selected_tools])
+            # 多措施边际递减叠加法则：按实证 AVE 降序排列，第 k 项权重为 0.65^(k-1)，再乘以执法严格度系数
+            aves_sorted = sorted([(t, float(emp_dict[t]["ave"])) for t in selected_tools], key=lambda x: x[1], reverse=True)
+            weighted_aves = [a * (0.65 ** idx) for idx, (_, a) in enumerate(aves_sorted)]
+            combined_ave = sum(weighted_aves) * intensity
+            avg_elast = float(np.mean([abs(float(emp_dict[t]["elast"])) for t in selected_tools]))
 
             raw_drop_pct = min(92.0, (combined_ave / 100.0) * avg_elast * 68.0)
             trade_loss_usd = base_trade * (raw_drop_pct / 100.0)
-            remaining_usd = base_trade - trade_loss_usd
+            remaining_usd = max(0.0, base_trade - trade_loss_usd)
 
             if combined_ave >= 55 or ("疫病检疫" in selected_tools and intensity >= 1.2):
                 risk_label = "🔴 高风险（极易触发 WTO STC 特别贸易关注或 DSB 专家组磋商）"
+                compliance_tip = "建议配套疫病流行病学风险评估报告、分区管理科学依据及过渡期安排，降低被认定为隐蔽贸易限制的风险。"
             elif combined_ave >= 30:
                 risk_label = "🟡 中等风险（可能引发双边技术磋商，需准备充分科学风险评估依据）"
+                compliance_tip = "建议强化口岸抽检记录与实验室检测标准衔接，确保监管措施在双边技术质询中具备充分可核查性。"
             else:
                 risk_label = "🟢 低风险（符合 WTO SPS 协定常规监管范畴，合规抗辩空间大）"
+                compliance_tip = "措施力度相对温和，重点在于保持执法一致性、信息透明度与企业合规指引清晰度。"
 
             m1, m2, m3 = st.columns(3)
             m1.metric("综合等效关税率 (AVE)", f"{combined_ave:.1f}%")
             m2.metric("预期双边进口降幅", f"-{raw_drop_pct:.1f}%", f"-{trade_loss_usd:.2f} 亿美元")
             m3.metric("反制后预期进口额", f"{remaining_usd:.2f} 亿美元")
 
-            st.info(f"**WTO 合规与争端触发风险研判**：{risk_label}")
+            st.info(f"**WTO 合规与争端触发风险研判**：{risk_label}\n\n**政策执行与合规提示**：{compliance_tip}")
 
-            st.markdown("#### 3. 进口缺口第三方供应链转移分配测算（预计分流 85% 缺口）")
-            diversion_total = trade_loss_usd * 0.85
-            shares = {"巴西 (BRA)": 0.42, "阿根廷 (ARG)": 0.22, "乌拉圭 (URY)": 0.16, "新西兰 (NZL)": 0.12, "其他供应国": 0.08}
+            # 3. 进口缺口第三方供应链转移分配测算
+            st.markdown(f"#### 3. 进口缺口第三方供应链转移分配测算（预计分流 {int(diversion_rate*100)}% 缺口）")
+            diversion_total = trade_loss_usd * diversion_rate
+            shares = {
+                "巴西 (BRA)": 0.42,
+                "阿根廷 (ARG)": 0.22,
+                "乌拉圭 (URY)": 0.16,
+                "新西兰 (NZL)": 0.12,
+                "其他供应国": 0.08
+            }
+            active_shares = {k: v for k, v in shares.items() if k != target_country}
+            share_sum = sum(active_shares.values())
+            norm_shares = {k: (v / share_sum if share_sum > 0 else 0.0) for k, v in active_shares.items()}
+
             df_div = pd.DataFrame([
-                {"替代供应方": k, "承接转移份额": f"{v*100:.0f}%", "预计新增对华出口额 (亿美元)": round(diversion_total * v, 2)}
+                {
+                    "替代供应方": k,
+                    "再分配承接份额": f"{v*100:.1f}%",
+                    "预计新增对华出口额 (亿美元)": round(diversion_total * v, 2)
+                }
+                for k, v in norm_shares.items()
+            ])
+            st.dataframe(df_div, width="stretch", hide_index=True)
+
+            # 4. 执法强度敏感性对比（0.8 / 1.0 / 1.2 / 1.4）
+            st.markdown("#### 4. 执法严格度敏感性情景对比")
+            base_sum_ave = sum(weighted_aves)
+            sens_rows = []
+            for coeff in [0.8, 1.0, 1.2, 1.4]:
+                s_ave = base_sum_ave * coeff
+                s_drop = min(92.0, (s_ave / 100.0) * avg_elast * 68.0)
+                s_loss = base_trade * (s_drop / 100.0)
+                sens_rows.append({
+                    "执法严格度系数": coeff,
+                    "综合AVE (%)": round(s_ave, 1),
+                    "预期进口降幅 (%)": round(s_drop, 1),
+                    "贸易损失额 (亿美元)": round(s_loss, 2),
+                    "预期留存进口额 (亿美元)": round(max(0.0, base_trade - s_loss), 2)
+                })
+            df_sens = pd.DataFrame(sens_rows)
+            st.dataframe(df_sens, width="stretch", hide_index=True)
+            st.bar_chart(
+                df_sens.set_index("执法严格度系数")[["贸易损失额 (亿美元)", "预期留存进口额 (亿美元)"]],
+                stack=False,
+                width="stretch"
+            )
+
+            # 5. 一键导出推演结果明细
+            export_summary = pd.DataFrame([{
+                "目标反制供应国": target_country,
+                "基准进口额_亿美元": base_trade,
+                "组合反制工具": " + ".join(selected_tools),
+                "执法严格度系数": intensity,
+                "第三方分流比例": diversion_rate,
+                "综合等效关税率_AVE_pct": round(combined_ave, 2),
+                "平均绝对进口价格弹性": round(avg_elast, 3),
+                "预期双边进口降幅_pct": round(raw_drop_pct, 2),
+                "预期双边贸易损失_亿美元": round(trade_loss_usd, 2),
+                "反制后预期进口额_亿美元": round(remaining_usd, 2),
+                "第三方分流总量_亿美元": round(diversion_total, 2)
+            }])
+            st.download_button(
+                label="⬇️ 导出当前情景推演汇总表 (CSV)",
+                data=export_summary.to_csv(index=False).encode("utf-8-sig"),
+                file_name="sps_countermeasure_simulation_summary.csv",
+                mime="text/csv"
+            )
+
+    with st.expander("📐 查看反制推演模型公式与参数设定说明"):
+        st.markdown("""
+        * **多工具边际递减叠加**：将所选 SPS 工具按实证 AVE 从高到低排序（记为 $A_{(1)} \ge A_{(2)} \ge \dots \ge A_{(k)}$），按权重 $0.65^{i-1}$ 折算后乘以执法严格度系数 $\\lambda$：
+          $$\\text{AVE}_{\\text{综合}} = \\lambda \\sum_{i=1}^{k} 0.65^{i-1} A_{(i)}$$
+        * **贸易抑制降幅测算**：结合所选工具的平均绝对进口价格弹性 $\\bar{\\varepsilon}$ 与缩放校准系数（上限封顶 $92.0\\%$）：
+          $$\\Delta \\text{Trade}\\% = \\min\\left(92.0,\; \\frac{\\text{AVE}_{\\text{综合}}}{100} \\times \\bar{\\varepsilon} \\times 68.0\\right)$$
+        * **第三方供应国分流归整**：当目标供应国为分流名单成员之一时，自动剔除自身并按剩余供应国相对权重归一化分配，确保分流份额合计为 $100\\%$。
+        """)
                 for k, v in shares.items() if k != target_country
             ])
             st.dataframe(df_div, width="stretch", hide_index=True)
