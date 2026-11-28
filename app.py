@@ -216,7 +216,11 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
 
                 where_parts = []
                 if target_tokens:
-                    c_cond = " OR ".join([f"toUpper(c.iso3) CONTAINS '{t.upper()}'" for t in set(target_tokens)])
+                    conds = []
+                    for t in set(target_tokens):
+                        tu = t.upper().replace("'", "\\'")
+                        conds.append(f"toUpper(c.iso3) = '{tu}' OR toUpper(c.iso3) STARTS WITH '{tu},' OR toUpper(c.iso3) CONTAINS ', {tu}'")
+                    c_cond = " OR ".join(conds)
                     where_parts.append(f"({c_cond})")
                 if matched_cats:
                     cat_cond = " OR ".join([f"cat.name = '{c}'" for c in matched_cats])
