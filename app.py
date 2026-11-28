@@ -80,7 +80,11 @@ if page == "1. 图谱全景与实证基准库":
     with col_right:
         st.subheader("各类 SPS 工具贸易抑制强度对比 (AVE %)")
         if not df_cat.empty:
-            st.bar_chart(df_cat.set_index("措施维度")[["实证AVE_pct", "短期贸易抑制率_pct"]])
+            st.bar_chart(
+                df_cat.set_index("措施维度")[["实证AVE_pct", "短期贸易抑制率_pct"]],
+                stack=False,
+                width="stretch"
+            )
 
 # ================= 模块 2：自然语言智能检索 =================
 elif page == "2. 自然语言智能检索 (GraphQA)":
