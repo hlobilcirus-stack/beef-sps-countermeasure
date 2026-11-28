@@ -43,7 +43,6 @@ page = st.sidebar.radio(
 
 # ================= 模块 1：图谱全景与实证基准库 =================
 if page == "1. 图谱全景与实证基准库":
-if page == "1. 图谱全景与实证基准库":
     st.title("📊 牛肉贸易摩擦 SPS 知识图谱全景看板")
 
     counts_rows = run_cypher("""
@@ -269,8 +268,8 @@ elif page == "2. 自然语言智能检索 (GraphQA)":
                 LIMIT 50
                 """
                 res = run_cypher(cypher)
-                with st.expander("查看自动生成的 Cypher 图查询语句", expanded=True):
-                    st.text(cypher)
+                with st.expander("查看自动生成的 Cypher 图查询语句"):
+                    st.code(cypher, language="cypher")
                 if res:
                     st.success(f"检索成功！共命中 {len(res)} 条触发争端的通报记录：")
                     st.dataframe(pd.DataFrame(res), width="stretch", hide_index=True, column_config=link_cfg)
